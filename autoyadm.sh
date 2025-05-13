@@ -77,7 +77,7 @@ done) <"$(get_tracked_file)"
 yadm add -u
 
 # Define the location of the ssh-agent environment
-sshenv="$HOME/.ssh/environment-$HOST"
+sshenv=$(echo $SSH_AUTH_SOCK)
 if [[ -n $(yadm status --porcelain) ]]; then
   yadm commit -m "AutoYADM commit: $(date +'%Y-%m-%d %H:%M:%S')"
   # Check if the ssh-agent env exists
