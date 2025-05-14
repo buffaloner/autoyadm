@@ -76,19 +76,18 @@ done) <"$(get_tracked_file)"
 
 yadm add -u
 
-# Define the location of the ssh-agent environment
-sshenv=$(echo $SSH_AUTH_SOCK)
+# SSH_AUTH_SOCK value is the location of the ssh-agent environment
+# this should be OS agnostic
 if [[ -n $(yadm status --porcelain) ]]; then
   yadm commit -m "AutoYADM commit: $(date +'%Y-%m-%d %H:%M:%S')"
   # Check if the ssh-agent env exists
-  if [[ -f "$sshenv" ]]; then
+  if [[ -n $SSH_AUTH_SOCK ]]; then
     if ((!AUTOYADMPUSH)); then
       echo "$AYM Pushing disabled, aborting..."
       exit 1
     fi
     # Directive to suppress shellcheck warning
     # shellcheck source=/dev/null
-    source "$sshenv"
     echo "$AYM Push successful!"
   else
     echo "$AYE ssh-agent environment not found, aborting push..."
