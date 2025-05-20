@@ -9,7 +9,37 @@
 
 AYE="AutoYADM Error:"
 AYM="AutoYADM:"
+# TODO: ensure if we are tracking the encrypt list and archive,
+# to run the encryption command to generate and updated encrypted archive
 
+#### Encrypted Tracking
+
+function get_encrypted_file {
+  if [ -e "$XDG_CONFIG_HOME" ]; then
+    if [ ! -f "$XDG_CONFIG_HOME/yadm/encrypt" ]; then
+      mkdir -p "$XDG_CONFIG_HOME/yadm"
+      touch "$XDG_CONFIG_HOME/yadm/encrypt"
+    fi
+    echo "$XDG_CONFIG_HOME/yadm/encrypt"
+  elif [ -f "$HOME/.config/yadm/encrypt" ]; then
+    echo "$HOME/.config/yadm/encrypt"
+  else
+    echo "$AYM Please move your encrypt file to ~/.config/yadm/encrypt."
+    echo "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/encrypt"
+  fi
+}
+# We check not to overwrite the user's env setting
+if [ -z "$AUTOYADMENCRYPT" ] || ((!AUTOYADMENCRYPT)); then
+  AUTOYADMENCRYPT=0
+  echo "$AYM YADM encrytpion is disabled for cron compatibility, set AUTOYADMENCRYPT=1 when running ad hoc."
+else
+  yadm encrypt # prompts for password, should be wrapped with a --encrypt option to escape cron updates
+fi
+
+#### Normal Tracking
+
+# Do not include encrypt in tracked list since it's built into YADM, just process encryption on each commit
+# TODO: add a .autoyadmignore config, or logic that disables tracking of encrypt and archive files
 function get_tracked_file {
   if [ -e "$XDG_CONFIG_HOME" ]; then
     if [ ! -f "$XDG_CONFIG_HOME/yadm/tracked" ]; then
@@ -76,25 +106,56 @@ done) <"$(get_tracked_file)"
 
 yadm add -u
 
-# SSH_AUTH_SOCK value is the location of the ssh-agent environment
-# this should be OS agnostic
-if [[ -n $(yadm status --porcelain) ]]; then
-  yadm commit -m "AutoYADM commit: $(date +'%Y-%m-%d %H:%M:%S')"
-  # Check if the ssh-agent env exists
-  if [[ -n $SSH_AUTH_SOCK ]]; then
+yadmcommit() {
+    # yadm status 
+    if [[ -n $(yadm status --porcelain) ]]; then
+        # -> make commit 
+        yadm commit -m "AutoYADM commit: $(date +'%Y-%m-%d %H:%M:%S')"
+    else
+        echo "$AYM Nothing to commit."
+    fi
+}
+autopush() {
+    # -> check if auto-push enabled 
     if ((!AUTOYADMPUSH)); then
       echo "$AYM Pushing disabled, aborting..."
       exit 1
     fi
-    # Directive to suppress shellcheck warning
-    # shellcheck source=/dev/null
-    echo "$AYM Push successful!"
-  else
-    echo "$AYE ssh-agent environment not found, aborting push..."
-    exit 1
-  fi
-else
-  echo "$AYM Nothing to commit."
-fi
+}
+# -> proceed with push
+sshagent() {
+    # Check if the socket exists (may not be universal)
+    if [[ -S "$SSH_AUTH_SOCK" ]]; then
+        echo "SSH_AUTH_SOCK is set and socket exists: $SSH_AUTH_SOCK"
+        echo "Checking agent forwarding"
+        # -> check if key is being forwarded
+        ssh-add -L 2>/dev/null
+        if [[ $? -eq 0 ]]; then
+            echo "$AYM: SSH Agent is running and has forwarded keys, proceeding"
+        else
+            echo "$AYE SSH Agent is not running or has no forwarded keys"
+            echo "Checking global git config for sshCommand as last resort"
+            if [ -f "$HOME/.gitconfig" ]; then
+                echo "$AYM Global .gitconfig exists."
+                if grep -q  'sshCommand = ssh -i' "$HOME/.gitconfig"; then
+                    echo "$AYM forward on push found in global config, attempting YADM push"
+                else
+                    echo "$AYE forward on push NOT found in global config. Aborting YADM push"
+                    exit 1
+                fi
+            else
+                echo "$AYE $HOME/.gitconfig does not exist! Aborting..."
+                exit 1
+            fi
+        fi
+    else
+        echo "$AYE: SSH_AUTH_SOCK is set, but the socket is invalid or not found. Aborting push..."
+        exit 1
+    fi
+}
 
-yadm push
+
+yadmcommit # always commit updates
+autopush   # check for autopushing to remote
+sshagent   # verify ssh agent is available
+yadm push  # push to remote
