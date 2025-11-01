@@ -31,7 +31,7 @@ function get_encrypted_file {
 # We check not to overwrite the user's env setting
 if [ -z "$AUTOYADMENCRYPT" ] || ((!AUTOYADMENCRYPT)); then
   AUTOYADMENCRYPT=0
-  echo "$AYM YADM encrytpion is disabled for cron compatibility, set AUTOYADMENCRYPT=1 when running ad hoc."
+  echo "$AYM YADM encryption is disabled for cron compatibility, set AUTOYADMENCRYPT=1 when running ad hoc."
 else
   yadm encrypt # prompts for password, should be wrapped with a --encrypt option to escape cron updates
 fi
